@@ -1,8 +1,8 @@
 # Sportradar
 
 ### Description
-This is implementation of simple REST API which reads data about sport matches from remote 
-service in JSON format.
+This is an implementation of simple REST API which reads data about sport matches from remote 
+service in JSON format, joins and caches all data and them exposes endpoints for retrieving it.
 
 ### Requirements
 installed Java 17 and Maven
