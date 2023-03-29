@@ -1,8 +1,10 @@
-package api.solution.sportradar.cache;
+package api.solution.sportradar.cache.concurrent.impl;
+
+import api.solution.sportradar.cache.concurrent.ConcurrentCache;
+import api.solution.sportradar.cache.concurrent.ConcurrentCacheEntry;
 
 import java.util.Collection;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.TimeUnit;
 
 public class ConcurrentCacheImpl<K, V> implements ConcurrentCache<K,V> {
 
@@ -13,15 +15,15 @@ public class ConcurrentCacheImpl<K, V> implements ConcurrentCache<K,V> {
     }
 
     @Override
-    public void put(K key, V value, long expiration, TimeUnit unit) {
-        CacheEntry<V> entry = new CacheEntry<>(value, expiration, unit);
+    public void put(K key, V value) {
+        CacheEntry<V> entry = new CacheEntry<>(value);
         cache.put(key, entry);
     }
 
     @Override
     public V getValueForKey(K key) {
          ConcurrentCacheEntry<V> entry = cache.get(key);
-         return entry.getValue();
+         return entry.value();
     }
 
     @Override
@@ -48,21 +50,4 @@ public class ConcurrentCacheImpl<K, V> implements ConcurrentCache<K,V> {
         cache.remove(key);
     }
 
-    private static class CacheEntry<V> implements ConcurrentCacheEntry<V> {
-        private final V value;
-        private final long expirationTime;
-
-        public CacheEntry(V value, long expiration, TimeUnit unit) {
-            this.value = value;
-            this.expirationTime = System.currentTimeMillis() + unit.toMillis(expiration);
-        }
-
-        public V getValue() {
-            return value;
-        }
-
-        public boolean isExpired() {
-            return System.currentTimeMillis() > expirationTime;
-        }
-    }
 }

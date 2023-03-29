@@ -1,7 +1,6 @@
 package api.solution.sportradar.job;
 
-import api.solution.sportradar.cache.ConcurrentCacheEntry;
-import api.solution.sportradar.cache.MatchCache;
+import api.solution.sportradar.cache.MatchCacheProvider;
 import api.solution.sportradar.client.WebClient;
 import api.solution.sportradar.model.Match;
 import api.solution.sportradar.model.MatchStatus;
@@ -10,7 +9,6 @@ import jakarta.json.JsonArray;
 import jakarta.json.JsonObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
@@ -19,8 +17,6 @@ import java.io.IOException;
 import java.time.ZonedDateTime;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.Optional;
-import java.util.concurrent.TimeUnit;
 
 @Component
 public class GetAndCacheDataJob {
@@ -41,14 +37,11 @@ public class GetAndCacheDataJob {
 
     private final WebClient webClient;
 
-    @Value("${cache.expiration.seconds}")
-    private transient Short expirationTime;
+    private final MatchCacheProvider matchCacheProvider;
 
-    @Value("${cache.expiration.live.match.seconds}")
-    private transient Short expirationTimeLive;
-
-    public GetAndCacheDataJob(WebClient webClient) {
+    public GetAndCacheDataJob(WebClient webClient, MatchCacheProvider matchCacheProvider) {
         this.webClient = webClient;
+        this.matchCacheProvider = matchCacheProvider;
     }
 
     @PostConstruct
@@ -67,39 +60,36 @@ public class GetAndCacheDataJob {
             JsonArray results = webClient.getAllMatchesJson();
             for(JsonObject matchJson : results.getValuesAs(JsonObject.class)) {
 
-                Long matchId = (long) matchJson.getInt(ID);
                 JsonObject tournamentJsonForMatch = tournamentsMap.get(matchJson.getInt(TOURNAMENT_ID));
                 JsonObject sportJsonForTournament = sportsMap.get(tournamentJsonForMatch.getInt(SPORT_ID));
 
-                    Optional<ConcurrentCacheEntry<Match>> matchOptional = Optional.ofNullable(MatchCache.INSTANCE.cache().getEntryForKey(matchId));
-                    if (matchOptional.isPresent()){
-                        if(!matchOptional.get().isExpired()) {
-                            log.info("cache entry for id: " + matchId + " is still valid");
-                            continue;
-                        }
-                    }
+                Match match = buildMatchFromJson(matchJson, tournamentJsonForMatch, sportJsonForTournament);
 
-                MatchStatus matchStatus = getMatchStatusForString(matchJson.getString(STATUS));
+                matchCacheProvider.cachePut(match);
 
-                Match match = new Match.Builder()
-                        .withId(matchId)
-                        .withSport(sportJsonForTournament.getString(NAME))
-                        .withTournament(tournamentJsonForMatch.getString(NAME))
-                        .withStartTime(ZonedDateTime.parse(matchJson.getString(START_TIME)))
-                        .withMatchStatus(matchStatus)
-                        .withHomeTeam(matchJson.getString(HOME_TEAM))
-                        .withAwayTeam(matchJson.getString(AWAY_TEAM))
-                        .withHomeScore(Short.parseShort(matchStatus.equals(MatchStatus.SCHEDULED) ? ZERO : matchJson.getString(HOME_SCORE)))
-                        .withAwayScore(Short.parseShort(matchStatus.equals(MatchStatus.SCHEDULED) ? ZERO : matchJson.getString(AWAY_SCORE)))
-                        .build();
-                MatchCache.INSTANCE.cache().put(match.getId(), match, matchStatus.equals(MatchStatus.LIVE) ? expirationTimeLive: expirationTime, TimeUnit.SECONDS);
-
-                log.info("Updated cache for id: " + matchId);
+                log.info("Updated cache for id: " + match.getId());
             }
 
         } catch (Exception e) {
             log.error("Could not update cache data:" +  e.getLocalizedMessage());
         }
+    }
+
+    private Match buildMatchFromJson(JsonObject matchJson, JsonObject tournamentJsonForMatch, JsonObject sportJsonForTournament) throws IOException {
+
+        MatchStatus matchStatus = getMatchStatusForString(matchJson.getString(STATUS));
+
+        return new Match.Builder()
+                .withId((long) matchJson.getInt(ID))
+                .withSport(sportJsonForTournament.getString(NAME))
+                .withTournament(tournamentJsonForMatch.getString(NAME))
+                .withStartTime(ZonedDateTime.parse(matchJson.getString(START_TIME)))
+                .withMatchStatus(matchStatus)
+                .withHomeTeam(matchJson.getString(HOME_TEAM))
+                .withAwayTeam(matchJson.getString(AWAY_TEAM))
+                .withHomeScore(Short.parseShort(matchStatus.equals(MatchStatus.SCHEDULED) ? ZERO : matchJson.getString(HOME_SCORE)))
+                .withAwayScore(Short.parseShort(matchStatus.equals(MatchStatus.SCHEDULED) ? ZERO : matchJson.getString(AWAY_SCORE)))
+                .build();
     }
 
     private MatchStatus getMatchStatusForString(String name) throws IOException {

@@ -1,7 +1,6 @@
 package api.solution.sportradar.service;
 
-import api.solution.sportradar.cache.ConcurrentCacheEntry;
-import api.solution.sportradar.cache.MatchCache;
+import api.solution.sportradar.data.DataProvider;
 import api.solution.sportradar.model.Match;
 import api.solution.sportradar.model.MatchStatus;
 import org.springframework.stereotype.Service;
@@ -11,16 +10,17 @@ import java.util.List;
 
 @Service
 public class MatchServiceImpl implements MatchService{
+
+    private final DataProvider dataProvider;
+
+    public MatchServiceImpl(DataProvider dataProvider) {
+        this.dataProvider = dataProvider;
+    }
+
     @Override
     public List<Match> getAll() {
 
-        List<Match> allMatches = new ArrayList<>();
-
-        for(ConcurrentCacheEntry<Match> entry : MatchCache.INSTANCE.cache().getValues()) {
-            allMatches.add(entry.getValue());
-        }
-
-        return allMatches;
+        return new ArrayList<>(dataProvider.getMatches());
 
     }
 
@@ -29,10 +29,7 @@ public class MatchServiceImpl implements MatchService{
 
         List<Match> completedMatches = new ArrayList<>();
 
-        Match match;
-
-        for(ConcurrentCacheEntry<Match> entry : MatchCache.INSTANCE.cache().getValues()) {
-            match = entry.getValue();
+        for(Match match : dataProvider.getMatches()) {
             if(match.getMatchStatus().equals(MatchStatus.COMPLETED)) {
                 completedMatches.add(match);
             }
@@ -46,10 +43,7 @@ public class MatchServiceImpl implements MatchService{
 
         List<Match> liveMatches = new ArrayList<>();
 
-        Match match;
-
-        for(ConcurrentCacheEntry<Match> entry : MatchCache.INSTANCE.cache().getValues()) {
-            match = entry.getValue();
+        for(Match match : dataProvider.getMatches()) {
             if(match.getMatchStatus().equals(MatchStatus.LIVE)) {
                 liveMatches.add(match);
             }
@@ -63,11 +57,11 @@ public class MatchServiceImpl implements MatchService{
 
         List<Match> matchesForTeam = new ArrayList<>();
 
-        Match match;
+        String pattern = "(?i).*%s.*";
 
-        for(ConcurrentCacheEntry<Match> entry : MatchCache.INSTANCE.cache().getValues()) {
-            match = entry.getValue();
-            if(match.getAwayTeam().matches(String.format("(.*)%s(.*)", teamName)) || match.getHomeTeam().matches(String.format("(.*)%s(.*)", teamName)) ) {
+        for(Match match : dataProvider.getMatches()) {
+            if(match.getAwayTeam().matches(String.format(pattern, teamName))
+                    || match.getHomeTeam().matches(String.format(pattern, teamName)) ) {
                 matchesForTeam.add(match);
             }
         }

@@ -1,11 +1,10 @@
-package api.solution.sportradar.cache;
+package api.solution.sportradar.cache.concurrent;
 
 import java.util.Collection;
-import java.util.concurrent.TimeUnit;
 
 public interface ConcurrentCache<K, V> {
 
-    void put(K key, V value, long expiration, TimeUnit unit);
+    void put(K key, V value);
 
     void remove(K key);
 
